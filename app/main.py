@@ -9,14 +9,18 @@ from app.config import get_settings
 from app.db import init_db
 from app.errors import AppError, app_error_handler
 from app.gsc_client import GoogleAPIError
-from app.routers import dev, gsc, oauth, risc
+from app.log_redaction import install as install_log_redaction
+from app.routers import dev, gsc, oauth, risc, ui
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+install_log_redaction()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    # uvicorn configures its own handlers after import, so attach again here.
+    install_log_redaction("uvicorn", "uvicorn.access", "uvicorn.error")
     yield
 
 
@@ -41,7 +45,12 @@ async def google_api_error_handler(_: Request, exc: GoogleAPIError) -> JSONRespo
     status = exc.status if 400 <= exc.status < 500 else 502
     return JSONResponse(
         status_code=status,
-        content={"error": "google_api_error", "google_status": exc.status, "reason": exc.reason, "message": exc.message},
+        content={
+            "error": "google_api_error",
+            "google_status": exc.status,
+            "reason": exc.reason,
+            "message": exc.message,
+        },
     )
 
 
@@ -50,6 +59,7 @@ def health() -> dict:
     return {"ok": True}
 
 
+app.include_router(ui.router)
 app.include_router(oauth.router)
 app.include_router(gsc.router)
 app.include_router(risc.router)

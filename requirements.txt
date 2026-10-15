@@ -7,7 +7,5 @@ sqlalchemy==2.0.36
 cryptography==44.0.0
 pyjwt[crypto]==2.10.1
 itsdangerous==2.2.0
-
-# tests
-pytest==8.3.4
-respx==0.22.0
+# IANA time zones for the Pacific-time quota day on hosts without system tzdata (Windows, slim images)
+tzdata==2024.2

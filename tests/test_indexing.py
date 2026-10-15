@@ -1,14 +1,18 @@
 import httpx
 import pytest
 
-from app import gsc_client, google_oauth
+from app import google_oauth, gsc_client
 from app.gsc_client import match_property
 from tests.conftest import connect
 
 PUBLISH_OK = {
     "urlNotificationMetadata": {
         "url": "https://www.example.com/jobs/42",
-        "latestUpdate": {"url": "https://www.example.com/jobs/42", "type": "URL_UPDATED", "notifyTime": "2026-10-16T10:00:00Z"},
+        "latestUpdate": {
+            "url": "https://www.example.com/jobs/42",
+            "type": "URL_UPDATED",
+            "notifyTime": "2026-10-16T10:00:00Z",
+        },
     }
 }
 
@@ -69,7 +73,10 @@ def test_401_triggers_one_refresh_and_retry(client, google):
         return_value=httpx.Response(200, json={"access_token": "ya29.after-401", "expires_in": 3599})
     )
     publish = google.post(gsc_client.INDEXING_PUBLISH_URL).mock(
-        side_effect=[httpx.Response(401, json={"error": {"code": 401, "message": "Invalid Credentials"}}), httpx.Response(200, json=PUBLISH_OK)]
+        side_effect=[
+            httpx.Response(401, json={"error": {"code": 401, "message": "Invalid Credentials"}}),
+            httpx.Response(200, json=PUBLISH_OK),
+        ]
     )
 
     resp = client.post("/gsc/index", json={"url": "https://example.com/a"})
@@ -82,7 +89,9 @@ def test_quota_exhausted_surfaces_429(client, google):
     connect(client, google)
     google.get(gsc_client.SITES_URL).mock(return_value=_sites(("sc-domain:example.com", "siteOwner")))
     google.post(gsc_client.INDEXING_PUBLISH_URL).mock(
-        return_value=httpx.Response(429, json={"error": {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}})
+        return_value=httpx.Response(
+            429, json={"error": {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}}
+        )
     )
     resp = client.post("/gsc/index", json={"url": "https://example.com/a"})
     assert resp.status_code == 429

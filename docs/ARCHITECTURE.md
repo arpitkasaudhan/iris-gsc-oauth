@@ -11,10 +11,12 @@ flowchart LR
     subgraph API["FastAPI utility"]
         R1["/oauth/google/*<br/>connect, callback"]
         R2["/connections<br/>list, refresh, disconnect"]
-        R3["/gsc/*<br/>sites, index, status, inspect"]
+        R3["/gsc/*<br/>sites, index, batch, quota, status, inspect"]
         R4["/risc/events<br/>security events"]
         TS["token_service<br/>state, PKCE, refresh, revoke"]
-        GC["gsc_client<br/>property match, 401 retry"]
+        GC["gsc_client<br/>property match + cache, 401 retry"]
+        QT["quota<br/>daily budget, Pacific day"]
+        R3 --> QT
         CR["crypto<br/>AES-256-GCM key ring"]
         R1 --> TS
         R2 --> TS

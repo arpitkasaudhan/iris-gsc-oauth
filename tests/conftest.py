@@ -22,7 +22,7 @@ import pytest  # noqa: E402
 import respx  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import google_oauth  # noqa: E402
+from app import google_oauth, gsc_client  # noqa: E402
 from app.db import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -34,6 +34,7 @@ FULL_SCOPE = " ".join(google_oauth.SCOPES)
 def fresh_db():
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    gsc_client.clear_sites_cache()
     yield
 
 
@@ -57,12 +58,32 @@ def client():
 
 def make_id_token(sub: str = "google-sub-1", email: str = "owner@example.com") -> str:
     now = int(time.time())
-    claims = {"iss": "https://accounts.google.com", "aud": CLIENT_ID, "sub": sub, "email": email, "iat": now, "exp": now + 3600}
+    claims = {
+        "iss": "https://accounts.google.com",
+        "aud": CLIENT_ID,
+        "sub": sub,
+        "email": email,
+        "iat": now,
+        "exp": now + 3600,
+    }
     return jwt.encode(claims, "not-verified-in-this-flow-" + "x" * 32, algorithm="HS256")
 
 
-def token_payload(access="ya29.access-1", refresh="1//refresh-1", scope=FULL_SCOPE, sub="google-sub-1", email="owner@example.com", expires_in=3599):
-    body = {"access_token": access, "expires_in": expires_in, "scope": scope, "token_type": "Bearer", "id_token": make_id_token(sub, email)}
+def token_payload(
+    access="ya29.access-1",
+    refresh="1//refresh-1",
+    scope=FULL_SCOPE,
+    sub="google-sub-1",
+    email="owner@example.com",
+    expires_in=3599,
+):
+    body = {
+        "access_token": access,
+        "expires_in": expires_in,
+        "scope": scope,
+        "token_type": "Bearer",
+        "id_token": make_id_token(sub, email),
+    }
     if refresh:
         body["refresh_token"] = refresh
     return body

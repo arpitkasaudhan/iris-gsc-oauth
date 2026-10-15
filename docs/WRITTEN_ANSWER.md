@@ -74,7 +74,7 @@ Encryption ([`crypto.py`](../app/crypto.py)):
 * **AES-256-GCM** with a random 96-bit nonce per write. Format `v1.<kid>.<nonce+ciphertext+tag>`.
 * **AAD binds each ciphertext to its row** (`conn:<id>:refresh`). Copying an encrypted token into another user's row makes decryption fail instead of handing that user someone else's Google access.
 * **Key ring with key ids**, so rotation is "prepend a new key". Old rows still decrypt and are re-encrypted with the new key the next time they are refreshed.
-* Tokens are never logged and never returned by any endpoint. `GET /connections` shows status and expiry only.
+* Tokens are never logged and never returned by any endpoint. `GET /connections` shows status and expiry only. As a second line of defence, [`log_redaction.py`](../app/log_redaction.py) puts a filter on every log handler that scrubs access tokens (`ya29.`), refresh tokens (`1//`), bearer headers, client secrets and authorization codes, whichever library wrote the line.
 * In production the key ring would come from a KMS (envelope encryption: KMS-wrapped data keys), not an env var. Everything else stays the same.
 
 ## 4. Requesting indexing on demand
@@ -91,7 +91,21 @@ Honest caveats an integration engineer should raise with the product team:
 
 * Google documents the Indexing API for pages with **`JobPosting` or `BroadcastEvent` (in a `VideoObject`)** structured data. It accepts other URLs, but Google may ignore them and does not promise crawling or indexing for anything.
 * The **"Request indexing" button in the Search Console UI has no public API**. The Indexing API is the closest supported equivalent. For general pages the supported signal is a sitemap (`sitemaps.submit`, which needs the full `webmasters` scope).
-* Default quota is **200 publish requests per day per Cloud project**, shared by all users. `429` is surfaced as `429 google_quota_exceeded`. At scale this endpoint should enqueue and a worker should drain the queue within quota.
+* Default quota is **200 publish requests per day per Cloud project**, shared by all users. See 4.1.
+
+### 4.1 Quota, batching and cost control
+
+The quota belongs to *our* Cloud project, not to the user, so one busy tenant could block indexing for everyone. [`quota.py`](../app/quota.py) keeps a local mirror of it:
+
+* **Same day boundary as Google**: midnight Pacific time, DST-aware.
+* **Counted from the audit log**: only calls that actually reached the publish endpoint count, whether Google accepted or rejected them. A request we refused locally (no owned property, scope missing) costs nothing.
+* **Refuse before spending**: when the budget is gone we return `429 google_quota_exceeded` with `source: local_budget` and `resets_at`, without calling Google. Google's own `429` stays the hard stop.
+* **Fair share**: `INDEXING_DAILY_QUOTA_PER_USER` caps any single user's share of the project budget.
+* `GET /gsc/quota` shows used, remaining and reset time for the project and the caller.
+
+`POST /gsc/index/batch` takes up to 100 URLs, de-duplicates them, and returns one result per URL: `submitted`, `failed` (with the reason, such as `not_verified_owner`) or `skipped`. Once the budget runs out, either locally or through a Google 429, the remaining URLs are **skipped, not failed**, so the caller knows to resend them tomorrow. The ownership check reads a 60-second per-connection cache of the properties list, so a 100-URL batch makes one `sites.list` call instead of 100.
+
+For very large volumes the next step is a queue drained by a worker within the daily budget. The budget logic stays the same.
 
 ## 5. Refresh
 
@@ -147,7 +161,7 @@ This is the trick question, so precisely:
 * Real auth instead of `/dev/login`; `https_only` session cookies (already automatic when the redirect URI is https).
 * KMS-backed key ring; scheduled re-encryption job for rows on old key ids.
 * Distributed refresh lock (Postgres row lock or Redis) for multiple workers.
-* Indexing requests through a queue with a per-project daily budget, and a per-user fair share.
+* A queue in front of the daily budget for very large volumes (the budget and per-user share already exist, section 4.1).
 * Refresh tokens unused for **6 months** expire. Tenants that rarely index should be refreshed by a monthly job, or shown a "reconnect" nudge.
 * Google allows **100 live refresh tokens per Google account per client**; older ones are silently invalidated. Since every reconnect mints a new one, we always overwrite and never keep extras.
 * Metrics and alerts: refresh success rate, `invalid_grant` rate per hour (a spike means a config or Google-side issue, not 500 users revoking at once), quota usage, RISC events received.
@@ -156,7 +170,9 @@ This is the trick question, so precisely:
 ## 9. How to verify it
 
 ```bash
-pytest   # 43 tests, Google fully mocked with respx
+pytest   # 59 tests, Google fully mocked with respx
 ```
 
-The tests walk the same story as this document: the PKCE redirect, state replay, state from another user, partial consent, encrypted storage, transparent refresh, `invalid_grant` leading to `needs_reauth`, Google 503 not dropping the grant, 401 refresh-and-retry, siteFullUser rejected, multi-account owner selection, quota 429, revoke (ok, already revoked, Google down then retry), RISC events (signature, audience, idempotency, each event type) and key rotation.
+The tests walk the same story as this document: the PKCE redirect, state replay, state from another user, partial consent, encrypted storage, transparent refresh, `invalid_grant` leading to `needs_reauth`, Google 503 not dropping the grant, 401 refresh-and-retry, siteFullUser rejected, multi-account owner selection, Google 429, the local budget (Pacific day across DST, per-user cap, only real calls counted), batch results and skip-on-quota, the properties cache, log redaction, revoke (ok, already revoked, Google down then retry), RISC events (signature, audience, idempotency, each event type) and key rotation. CI runs them on Python 3.11 and 3.12 with lint and format checks, then builds the Docker image and checks its health endpoint.
+
+To try it by hand, `uvicorn app.main:app` (or `docker compose up`) and open `http://localhost:8000/`. The dashboard connects Google accounts, shows each connection's health and granted scopes, submits single URLs or batches, and shows the quota left and the audit history.

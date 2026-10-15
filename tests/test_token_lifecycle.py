@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import httpx
 
-from app import gsc_client, google_oauth
+from app import google_oauth, gsc_client
 from app.db import SessionLocal, utcnow
 from app.models import ConnectionStatus, GoogleConnection
 from tests.conftest import connect
@@ -21,7 +21,9 @@ def test_expired_access_token_is_refreshed_transparently(client, google):
     conn_id = connect(client, google)["connection"]["id"]
     _expire_access_token(conn_id)
     refresh = google.post(google_oauth.TOKEN_URL).mock(
-        return_value=httpx.Response(200, json={"access_token": "ya29.fresh", "expires_in": 3599, "scope": " ".join(google_oauth.SCOPES)})
+        return_value=httpx.Response(
+            200, json={"access_token": "ya29.fresh", "expires_in": 3599, "scope": " ".join(google_oauth.SCOPES)}
+        )
     )
     sites = google.get(gsc_client.SITES_URL).mock(return_value=httpx.Response(200, json=SITES))
 
@@ -47,7 +49,9 @@ def test_invalid_grant_flips_connection_to_needs_reauth(client, google):
     conn_id = connect(client, google)["connection"]["id"]
     _expire_access_token(conn_id)
     google.post(google_oauth.TOKEN_URL).mock(
-        return_value=httpx.Response(400, json={"error": "invalid_grant", "error_description": "Token has been expired or revoked."})
+        return_value=httpx.Response(
+            400, json={"error": "invalid_grant", "error_description": "Token has been expired or revoked."}
+        )
     )
 
     resp = client.get("/gsc/sites", params={"connection_id": conn_id})
@@ -92,7 +96,9 @@ def test_rotated_refresh_token_is_stored(client, google):
 
     conn_id = connect(client, google)["connection"]["id"]
     google.post(google_oauth.TOKEN_URL).mock(
-        return_value=httpx.Response(200, json={"access_token": "ya29.x", "expires_in": 3599, "refresh_token": "1//rotated"})
+        return_value=httpx.Response(
+            200, json={"access_token": "ya29.x", "expires_in": 3599, "refresh_token": "1//rotated"}
+        )
     )
     assert client.post(f"/connections/{conn_id}/refresh").status_code == 200
     with SessionLocal() as db:

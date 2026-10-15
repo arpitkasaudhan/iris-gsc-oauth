@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     access_token_skew_seconds: int = 120
     http_timeout_seconds: float = 10.0
 
+    # Google's Indexing API quota is per Cloud project (default 200 publish
+    # calls/day, reset at midnight Pacific). We track it locally so we refuse
+    # before burning a call, and can cap any single user's share of it.
+    indexing_daily_quota: int = 200
+    indexing_daily_quota_per_user: int = 0  # 0 = no per-user cap
+    batch_max_urls: int = 100
+    sites_cache_ttl_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

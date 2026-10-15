@@ -76,7 +76,13 @@ def test_forged_event_rejected(client, google):
     conn_id = connect(client, google)["connection"]["id"]
     attacker_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     forged = jwt.encode(
-        {"iss": ISSUER, "aud": CLIENT_ID, "iat": int(time.time()), "jti": "x", "events": {risc.EVT_TOKENS_REVOKED: {"subject": {"sub": "google-sub-1"}}}},
+        {
+            "iss": ISSUER,
+            "aud": CLIENT_ID,
+            "iat": int(time.time()),
+            "jti": "x",
+            "events": {risc.EVT_TOKENS_REVOKED: {"subject": {"sub": "google-sub-1"}}},
+        },
         attacker_key,
         algorithm="RS256",
     )
@@ -87,7 +93,13 @@ def test_forged_event_rejected(client, google):
 def test_event_for_another_client_rejected(client, google):
     connect(client, google)
     token = jwt.encode(
-        {"iss": ISSUER, "aud": "someone-else", "iat": int(time.time()), "jti": "y", "events": {risc.EVT_VERIFICATION: {}}},
+        {
+            "iss": ISSUER,
+            "aud": "someone-else",
+            "iat": int(time.time()),
+            "jti": "y",
+            "events": {risc.EVT_VERIFICATION: {}},
+        },
         _private_key,
         algorithm="RS256",
     )

@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////data/gsc_oauth.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - gsc-data:/data
+    restart: unless-stopped
+
+volumes:
+  gsc-data:

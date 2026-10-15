@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 
 def utcnow() -> datetime:
     # Stored as naive UTC so SQLite and Postgres behave the same.
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 _settings = get_settings()

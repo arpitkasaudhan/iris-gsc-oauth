@@ -1,5 +1,7 @@
 """Search Console + Indexing API calls made with a user's delegated token."""
 
+import threading
+import time
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -78,9 +80,31 @@ def call_google(db: Session, conn: GoogleConnection, method: str, url: str, **kw
 # ---------------------------------------------------------------- properties
 
 
-def list_sites(db: Session, conn: GoogleConnection) -> list[dict]:
+# Per-connection cache of the properties list. The ownership check runs before
+# every publish; without this a 100-URL batch would make 100 extra Google calls.
+_sites_cache: dict[str, tuple[float, list[dict]]] = {}
+_sites_lock = threading.Lock()
+
+
+def clear_sites_cache(connection_id: str | None = None) -> None:
+    with _sites_lock:
+        if connection_id:
+            _sites_cache.pop(connection_id, None)
+        else:
+            _sites_cache.clear()
+
+
+def list_sites(db: Session, conn: GoogleConnection, use_cache: bool = True) -> list[dict]:
     require_scope(conn, SCOPE_GSC_READONLY)
-    return call_google(db, conn, "GET", SITES_URL).get("siteEntry", [])
+    if use_cache:
+        with _sites_lock:
+            hit = _sites_cache.get(conn.id)
+        if hit and hit[0] > time.monotonic():
+            return hit[1]
+    sites = call_google(db, conn, "GET", SITES_URL).get("siteEntry", [])
+    with _sites_lock:
+        _sites_cache[conn.id] = (time.monotonic() + get_settings().sites_cache_ttl_seconds, sites)
+    return sites
 
 
 def _host(url: str) -> str:
@@ -151,6 +175,4 @@ def get_notification_metadata(db: Session, conn: GoogleConnection, page_url: str
 
 def inspect_url(db: Session, conn: GoogleConnection, page_url: str, site_url: str) -> dict:
     require_scope(conn, SCOPE_GSC_READONLY)
-    return call_google(
-        db, conn, "POST", URL_INSPECTION_URL, json={"inspectionUrl": page_url, "siteUrl": site_url}
-    )
+    return call_google(db, conn, "POST", URL_INSPECTION_URL, json={"inspectionUrl": page_url, "siteUrl": site_url})

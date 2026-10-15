@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GSC Indexing Console</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5d6673; --border: #e2e5ea;
+    --accent: #1a6fd6; --accent-text: #ffffff; --ok: #1d7a46; --ok-bg: #e5f4ec;
+    --warn: #8a5a00; --warn-bg: #fdf1dc; --bad: #b42318; --bad-bg: #fde8e6; --code: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --card: #171b21; --text: #e6e9ee; --muted: #9aa4b2; --border: #2a3039;
+      --accent: #4c94f0; --accent-text: #0b0e12; --ok: #5fd08f; --ok-bg: #133022;
+      --warn: #f0b85a; --warn-bg: #33270f; --bad: #ff8a80; --bad-bg: #3a1714; --code: #1f242c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; max-width: 1080px; margin: 0 auto; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .who { color: var(--muted); font-size: 14px; display: flex; gap: 10px; align-items: center; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 16px 48px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .wide { grid-column: 1 / -1; }
+  .card h2 { font-size: 15px; margin: 0 0 4px; }
+  .card p.hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; }
+  textarea { min-height: 96px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  button, .btn { display: inline-block; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; }
+  button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .55; cursor: progress; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td.url { word-break: break-all; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .ok { color: var(--ok); background: var(--ok-bg); }
+  .warn { color: var(--warn); background: var(--warn-bg); }
+  .bad { color: var(--bad); background: var(--bad-bg); }
+  .muted { color: var(--muted); }
+  pre { background: var(--code); padding: 10px; border-radius: 6px; overflow: auto; font-size: 12px; margin: 12px 0 0; max-height: 280px; }
+  .banner { grid-column: 1 / -1; padding: 10px 14px; border-radius: 8px; }
+  .meter { height: 8px; background: var(--code); border-radius: 999px; overflow: hidden; margin: 10px 0 6px; }
+  .meter > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .stat { font-size: 22px; font-weight: 650; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GSC Indexing Console</h1>
+  <div class="who"><span id="who"></span><a href="/docs" class="btn">API docs</a><button id="logout" class="hidden">Log out</button></div>
+</header>
+
+<main>
+  <div id="banner" class="banner hidden"></div>
+
+  <section id="login-card" class="card wide hidden">
+    <h2>Log in</h2>
+    <p class="hint">Stand-in for the host product's own login (ENABLE_DEV_LOGIN). Any id works; each id has its own Google connections.</p>
+    <form id="login-form" class="row"><input id="login-user" placeholder="user id, e.g. alice" required style="max-width:260px"><button class="primary">Log in</button></form>
+  </section>
+
+  <div id="app" class="hidden" style="display:contents">
+    <section class="card wide">
+      <h2>Google connections</h2>
+      <p class="hint">Each row is one Google account this user granted access to. Tokens are stored encrypted and never shown.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Google account</th><th>Status</th><th>Indexing scope</th><th>Access token expires (UTC)</th><th></th></tr></thead>
+        <tbody id="connections"></tbody>
+      </table></div>
+      <div class="row"><a class="btn primary" href="/oauth/google/connect">Connect a Google account</a></div>
+    </section>
+
+    <section class="card">
+      <h2>Request indexing</h2>
+      <p class="hint">The account must be a verified owner of the Search Console property.</p>
+      <form id="index-form">
+        <label for="index-url">Page URL</label>
+        <input id="index-url" type="url" placeholder="https://www.example.com/jobs/42" required>
+        <label for="index-type">Notification</label>
+        <select id="index-type"><option value="URL_UPDATED">URL_UPDATED (new or changed)</option><option value="URL_DELETED">URL_DELETED (removed)</option></select>
+        <div class="row"><button class="primary">Submit to Google</button><button type="button" id="status-btn">Check status</button></div>
+      </form>
+      <pre id="index-result" class="hidden"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Daily quota</h2>
+      <p class="hint">Mirrors Google's per-project Indexing API quota, reset at midnight Pacific.</p>
+      <div class="stat" id="quota-left">...</div>
+      <div class="meter"><div id="quota-bar"></div></div>
+      <div class="muted" id="quota-detail"></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Batch submit</h2>
+      <p class="hint">One URL per line. Each URL gets its own result; once the quota runs out the rest are skipped, not failed.</p>
+      <form id="batch-form">
+        <textarea id="batch-urls" placeholder="https://www.example.com/jobs/1&#10;https://www.example.com/jobs/2"></textarea>
+        <div class="row"><button class="primary">Submit batch</button><span class="muted" id="batch-summary"></span></div>
+      </form>
+      <div class="table-wrap"><table class="hidden" id="batch-table">
+        <thead><tr><th>URL</th><th>Result</th><th>Detail</th></tr></thead><tbody></tbody>
+      </table></div>
+    </section>
+
+    <section class="card wide">
+      <h2>Search Console properties</h2>
+      <p class="hint">Only <b>siteOwner</b> can use the Indexing API; full users cannot.</p>
+      <div class="row" style="margin-top:0"><button id="sites-btn">Load properties</button></div>
+      <div class="table-wrap"><table class="hidden" id="sites-table">
+        <thead><tr><th>Property</th><th>Permission</th><th>Google account</th></tr></thead><tbody></tbody>
+      </table></div>
+    </section>
+
+    <section class="card wide">
+      <h2>History</h2>
+      <p class="hint">Audit log of every indexing attempt made on this user's behalf.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When (UTC)</th><th>URL</th><th>Type</th><th>Outcome</th><th>HTTP</th></tr></thead>
+        <tbody id="history"></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c instanceof Node ? c : document.createTextNode(c ?? ""));
+  return node;
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    credentials: "same-origin",
+    headers: opts.body ? { "Content-Type": "application/json" } : {},
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
+  if (!res.ok) {
+    const err = new Error(data?.message || data?.detail || `HTTP ${res.status}`);
+    err.data = data; err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function banner(text, kind = "ok") {
+  const b = $("banner");
+  b.textContent = text;
+  b.className = `banner ${kind}`;
+}
+
+function badge(text, kind) { return el("span", { class: `badge ${kind}` }, text); }
+
+const STATUS_KIND = { active: "ok", needs_reauth: "bad", revoke_pending: "warn", revoked: "warn" };
+
+async function busy(button, fn) {
+  button.disabled = true;
+  try { await fn(); } catch (e) { banner(e.message, "bad"); } finally { button.disabled = false; }
+}
+
+async function loadConnections() {
+  const rows = await api("/connections");
+  const body = $("connections");
+  body.replaceChildren();
+  if (!rows.length) {
+    body.append(el("tr", {}, el("td", { colspan: 5, class: "muted" }, "No Google account connected yet.")));
+    return;
+  }
+  for (const c of rows) {
+    const hasIndexing = c.granted_scopes.includes("https://www.googleapis.com/auth/indexing");
+    const actions = el("td", { style: "white-space:nowrap" });
+    if (c.status === "active") {
+      actions.append(
+        el("button", { onclick: (e) => busy(e.target, async () => { await api(`/connections/${c.id}/refresh`, { method: "POST" }); banner("Access token refreshed."); await loadConnections(); }) }, "Refresh"), " ",
+        el("button", { class: "danger", onclick: (e) => disconnect(e.target, c) }, "Disconnect"),
+      );
+    } else if (c.status === "revoke_pending") {
+      actions.append(el("button", { class: "danger", onclick: (e) => disconnect(e.target, c) }, "Retry revoke"));
+    } else {
+      actions.append(el("a", { class: "btn primary", href: `/oauth/google/connect?login_hint=${encodeURIComponent(c.google_email || "")}` }, "Reconnect"));
+    }
+    const status = el("td", {}, badge(c.status.replace("_", " "), STATUS_KIND[c.status] || "warn"));
+    if (c.status_reason) status.append(el("div", { class: "muted" }, c.status_reason));
+    if (c.security_flag) status.append(el("div", { class: "muted" }, `security: ${c.security_flag}`));
+    body.append(el("tr", {},
+      el("td", {}, c.google_email || c.id),
+      status,
+      el("td", {}, hasIndexing ? badge("granted", "ok") : badge("not granted", "bad")),
+      el("td", {}, c.access_token_expires_at ? c.access_token_expires_at.replace("T", " ").slice(0, 19) : "-"),
+      actions,
+    ));
+  }
+}
+
+async function disconnect(button, c) {
+  if (!confirm(`Revoke access for ${c.google_email}? Google will forget this app's grant.`)) return;
+  await busy(button, async () => {
+    const r = await api(`/connections/${c.id}`, { method: "DELETE" });
+    banner(r.status === "revoked" ? "Disconnected and revoked at Google." : "Google was unreachable; revoke will need a retry.", r.status === "revoked" ? "ok" : "warn");
+    await loadConnections();
+  });
+}
+
+async function loadQuota() {
+  const q = await api("/gsc/quota");
+  const limit = q.user_limit ? Math.min(q.user_limit, q.project_limit) : q.project_limit;
+  const used = q.user_limit ? q.user_used : q.project_used;
+  $("quota-left").textContent = `${q.remaining} left today`;
+  $("quota-bar").style.width = `${Math.min(100, (used / limit) * 100)}%`;
+  $("quota-detail").textContent =
+    `Project: ${q.project_used}/${q.project_limit} used` +
+    (q.user_limit ? ` | You: ${q.user_used}/${q.user_limit}` : "") +
+    ` | resets ${new Date(q.resets_at).toLocaleString()}`;
+}
+
+async function loadHistory() {
+  const rows = await api("/gsc/index/history");
+  const body = $("history");
+  body.replaceChildren();
+  if (!rows.length) body.append(el("tr", {}, el("td", { colspan: 5, class: "muted" }, "Nothing submitted yet.")));
+  for (const r of rows) {
+    body.append(el("tr", {},
+      el("td", { style: "white-space:nowrap" }, r.created_at.replace("T", " ").slice(0, 19)),
+      el("td", { class: "url" }, r.url),
+      el("td", {}, r.type),
+      el("td", {}, badge(r.outcome, r.outcome === "submitted" ? "ok" : "bad")),
+      el("td", {}, String(r.http_status ?? "-")),
+    ));
+  }
+}
+
+function showResult(data) {
+  const pre = $("index-result");
+  pre.textContent = JSON.stringify(data, null, 2);
+  pre.classList.remove("hidden");
+}
+
+$("index-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  busy(e.submitter, async () => {
+    try {
+      const r = await api("/gsc/index", { method: "POST", body: { url: $("index-url").value, type: $("index-type").value } });
+      banner(`Submitted to Google via ${r.google_email} (${r.site_url}).`);
+      showResult(r);
+    } catch (err) {
+      showResult(err.data || { error: err.message });
+      throw err;
+    } finally {
+      loadQuota(); loadHistory(); loadConnections();
+    }
+  });
+});
+
+$("status-btn").addEventListener("click", (e) => busy(e.target, async () => {
+  const url = $("index-url").value;
+  if (!url) throw new Error("Enter a URL first.");
+  showResult(await api(`/gsc/index/status?url=${encodeURIComponent(url)}`));
+}));
+
+$("batch-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const urls = $("batch-urls").value.split(/\s+/).map((u) => u.trim()).filter(Boolean);
+  if (!urls.length) return banner("Add at least one URL.", "warn");
+  busy(e.submitter, async () => {
+    try {
+      const r = await api("/gsc/index/batch", { method: "POST", body: { urls, type: "URL_UPDATED" } });
+      $("batch-summary").textContent = `${r.submitted} submitted, ${r.failed} failed, ${r.skipped} skipped`;
+      const body = $("batch-table").querySelector("tbody");
+      body.replaceChildren();
+      const kind = { submitted: "ok", failed: "bad", skipped: "warn" };
+      for (const x of r.results) {
+        body.append(el("tr", {}, el("td", { class: "url" }, x.url), el("td", {}, badge(x.status, kind[x.status])), el("td", { class: "muted" }, x.message || x.site_url || "")));
+      }
+      $("batch-table").classList.remove("hidden");
+    } finally {
+      loadQuota(); loadHistory(); loadConnections();
+    }
+  });
+});
+
+$("sites-btn").addEventListener("click", (e) => busy(e.target, async () => {
+  const rows = await api("/gsc/sites");
+  const body = $("sites-table").querySelector("tbody");
+  body.replaceChildren();
+  if (!rows.length) body.append(el("tr", {}, el("td", { colspan: 3, class: "muted" }, "No properties found for the connected accounts.")));
+  for (const s of rows) {
+    const owner = s.permissionLevel === "siteOwner";
+    body.append(el("tr", {}, el("td", { class: "url" }, s.siteUrl), el("td", {}, badge(s.permissionLevel, owner ? "ok" : "warn")), el("td", {}, s.google_email || "")));
+  }
+  $("sites-table").classList.remove("hidden");
+}));
+
+$("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api(`/dev/login?user_id=${encodeURIComponent($("login-user").value)}`);
+    location.replace("/");
+  } catch (err) { banner(err.message, "bad"); }
+});
+
+$("logout").addEventListener("click", async () => { await api("/dev/logout"); location.replace("/"); });
+
+(async function init() {
+  const qs = new URLSearchParams(location.search);
+  if (qs.get("connected") !== null) {
+    const missing = qs.get("missing_scopes");
+    banner(missing ? `Connected ${qs.get("connected")}, but these scopes were not granted: ${missing}` : `Connected ${qs.get("connected")}.`, missing ? "warn" : "ok");
+  } else if (qs.get("error")) {
+    banner(`${qs.get("error")}: ${qs.get("message") || ""}`, "bad");
+  }
+  if (qs.toString()) history.replaceState(null, "", "/");
+
+  const me = await api("/api/me");
+  if (!me.user_id) {
+    if (me.dev_login_enabled) $("login-card").classList.remove("hidden");
+    else banner("Not logged in, and dev login is disabled.", "warn");
+    return;
+  }
+  $("who").textContent = `Signed in as ${me.user_id}`;
+  if (me.dev_login_enabled) $("logout").classList.remove("hidden");
+  $("app").classList.remove("hidden");
+  await Promise.allSettled([loadConnections(), loadQuota(), loadHistory()]);
+})();
+</script>
+</body>
+</html>

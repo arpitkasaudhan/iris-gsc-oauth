@@ -1,0 +1,9 @@
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501", "UP042"]  # UP042: StrEnum changes str() of stored enum values
+
+[lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]

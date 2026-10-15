@@ -51,6 +51,12 @@ class IndexRequestOut(BaseModel):
     google_response: dict
 
 
+class BatchIndexIn(BaseModel):
+    urls: list[HttpUrl] = Field(min_length=1)
+    type: Literal["URL_UPDATED", "URL_DELETED"] = "URL_UPDATED"
+    connection_id: str | None = None
+
+
 class InspectIn(BaseModel):
     url: HttpUrl
     connection_id: str | None = None
