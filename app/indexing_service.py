@@ -71,7 +71,7 @@ def submit(
         audit.http_status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
         audit.detail = str(exc)
         # Only calls that reached Google's publish endpoint spend quota.
-        audit.google_called = publishing and isinstance(exc, (GoogleAPIError, QuotaExceeded))
+        audit.google_called = publishing and isinstance(exc, GoogleAPIError | QuotaExceeded)
         db.add(audit)
         db.commit()
         raise
