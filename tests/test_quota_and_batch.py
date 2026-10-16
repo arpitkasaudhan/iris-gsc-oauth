@@ -71,6 +71,10 @@ def test_exhausted_project_quota_refuses_before_calling_google(client, owned, se
     assert resp.status_code == 429
     assert resp.json()["source"] == "local_budget"
     assert publish.call_count == 0
+    # the refusal is audited, and does not itself count against the budget
+    history = client.get("/gsc/index/history").json()
+    assert [(h["outcome"], h["http_status"]) for h in history] == [("failed", 429)]
+    assert client.get("/gsc/quota").json()["project_used"] == 3
 
 
 def test_per_user_cap(client, owned, settings):

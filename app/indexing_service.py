@@ -58,11 +58,11 @@ def submit(
     db: Session, user_id: str, page_url: str, notification_type: str, connection_id: str | None = None
 ) -> Submission:
     """Check budget, resolve the owning account, publish, and audit. Raises on failure."""
-    quota.ensure_available(db, user_id)
-
     audit = IndexRequest(user_id=user_id, url=page_url, notification_type=notification_type, outcome="failed")
     publishing = False
     try:
+        # Inside the try so a budget refusal is audited too ("why was my URL not sent?").
+        quota.ensure_available(db, user_id)
         conn, site = resolve(db, user_id, page_url, connection_id)
         audit.connection_id, audit.site_url = conn.id, site["siteUrl"]
         publishing = True

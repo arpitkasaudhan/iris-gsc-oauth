@@ -26,6 +26,8 @@ jobs:
         run: ruff format --check .
       - name: Tests
         run: pytest
+      - name: Live smoke test (real server, simulated Google)
+        run: python scripts/e2e_smoke.py
 
   docker:
     runs-on: ubuntu-latest

@@ -84,7 +84,7 @@ Encryption ([`crypto.py`](../app/crypto.py)):
 1. **Get a valid access token** (section 5).
 2. **Find the property and check ownership.** `GET https://www.googleapis.com/webmasters/v3/sites` returns each property with a `permissionLevel`. We match the URL to the most specific property: URL-prefix properties (`https://www.example.com/blog/`) by prefix, domain properties (`sc-domain:example.com`) by host and subdomain. The Indexing API only accepts calls from a **verified owner** (`siteOwner`). A `siteFullUser` gets `403 Permission denied. Failed to verify the URL ownership`, so we check first and return an actionable message. If the user linked several Google accounts and did not pick one, we use the one that owns the property.
 3. **Publish**: `POST https://indexing.googleapis.com/v3/urlNotifications:publish` with `{"url": ..., "type": "URL_UPDATED"}` and `Authorization: Bearer <access token>`. Google answers with `urlNotificationMetadata.latestUpdate.notifyTime`.
-4. **Audit**: every attempt, success or failure, is written to `index_requests` (`GET /gsc/index/history`).
+4. **Audit**: every attempt, success or failure (including refusals because the budget is spent), is written to `index_requests` (`GET /gsc/index/history`).
 5. **Follow up**: `GET /gsc/index/status?url=` (Indexing API metadata) and `POST /gsc/inspect` (URL Inspection API, Google's actual view of the page).
 
 Honest caveats an integration engineer should raise with the product team:
@@ -170,7 +170,8 @@ This is the trick question, so precisely:
 ## 9. How to verify it
 
 ```bash
-pytest   # 59 tests, Google fully mocked with respx
+pytest                      # 59 tests, Google fully mocked with respx
+python scripts/e2e_smoke.py # 33 checks against a live server over real HTTP
 ```
 
 The tests walk the same story as this document: the PKCE redirect, state replay, state from another user, partial consent, encrypted storage, transparent refresh, `invalid_grant` leading to `needs_reauth`, Google 503 not dropping the grant, 401 refresh-and-retry, siteFullUser rejected, multi-account owner selection, Google 429, the local budget (Pacific day across DST, per-user cap, only real calls counted), batch results and skip-on-quota, the properties cache, log redaction, revoke (ok, already revoked, Google down then retry), RISC events (signature, audience, idempotency, each event type) and key rotation. CI runs them on Python 3.11 and 3.12 with lint and format checks, then builds the Docker image and checks its health endpoint.

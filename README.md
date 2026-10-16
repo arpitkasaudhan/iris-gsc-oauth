@@ -66,9 +66,10 @@ Or with Docker: `docker compose up --build` (reads the same `.env`, keeps the SQ
 ```bash
 pip install -r requirements-dev.txt
 ruff check . && ruff format --check . && pytest
+python scripts/e2e_smoke.py   # 33 checks against a real running server, Google simulated
 ```
 
-59 tests, Google fully mocked with [respx](https://lundberg.github.io/respx/). They cover the PKCE redirect, state replay and cross-user state, partial consent, encrypted storage, transparent and 401-triggered refresh, `invalid_grant` vs transient failures, ownership checks, multi-account owner selection, Google 429, the local daily budget (Pacific-time day, per-user cap, only calls that reach Google count), batch results, the properties cache, log redaction, the dashboard and browser callback, revocation (including Google being down), RISC events and key rotation. CI runs lint, format and tests on Python 3.11 and 3.12, then builds the Docker image and checks `/health`.
+59 tests, Google fully mocked with [respx](https://lundberg.github.io/respx/). They cover the PKCE redirect, state replay and cross-user state, partial consent, encrypted storage, transparent and 401-triggered refresh, `invalid_grant` vs transient failures, ownership checks, multi-account owner selection, Google 429, the local daily budget (Pacific-time day, per-user cap, only calls that reach Google count), batch results, the properties cache, log redaction, the dashboard and browser callback, revocation (including Google being down), RISC events and key rotation. The smoke script then runs the whole story over real HTTP against a live uvicorn server and checks that no secret reached the logs. CI runs lint, format, tests and the smoke script on Python 3.11 and 3.12, then builds the Docker image and checks `/health`.
 
 ## Layout
 
